@@ -1,9 +1,83 @@
 import cv2
 import numpy as np
 import os
+import math
 
 # Load video
 videoFrame = cv2.VideoCapture(os.path.join(os.getcwd(), "test1.mp4"))
+
+
+
+
+
+# Reference Image pixels/cm conversion ------------------------------------------------------------------------------------------------------------------------------  
+# Load the reference image
+reference_image = cv2.imread('reference_image.jpg')
+
+# Manually define the known points (in pixels) and the real-world distance between them (in cm)
+point1 = (0, 0)  # Coordinates in pixels
+point2 = (0, 0)  # Coordinates in pixels
+known_distance_cm = 100.0  # The real-world distance between point1 and point2 in cm
+
+# Calculate the pixel distance
+pixel_distance = np.sqrt((point2[0] - point1[0]) ** 2 + (point2[1] - point1[1]) ** 2)
+
+# Calculate the pixel-to-centimeter ratio
+pixels_per_cm = pixel_distance / known_distance_cm
+
+
+
+
+
+
+
+
+
+
+
+# Edge Distance Lines ------------------------------------------------------------------------------------------------------------------------------
+def calculate_intersection(contours, angle, bottom_center, max_distance):
+    angle_rad = np.deg2rad(angle)
+    x_dir = np.cos(angle_rad)
+    y_dir = np.sin(angle_rad)
+
+    for d in range(1, max_distance):
+        x = int(bottom_center[0] + d * x_dir)
+        y = int(bottom_center[1] - d * y_dir)
+
+        if x < 0 or x >= width or y < 0 or y >= height:
+            break
+
+        for contour in contours:
+            if cv2.pointPolygonTest(contour, (x, y), False) >= 0:
+                return (x, y), d
+    
+    return (int(bottom_center[0] + max_distance * x_dir), int(bottom_center[1] - max_distance * y_dir)), max_distance
+
+# Edge Distance Lines
+def distanceContours(or_frame, edges, bottom_center, angles):
+    contours, hierarchy = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Maximum possible distance in the frame (diagonal)
+    max_distance = int(np.sqrt(or_frame.shape[0]**2 + or_frame.shape[1]**2))
+
+    for angle in angles:
+        end_point, distance = calculate_intersection(contours, angle, bottom_center, max_distance)
+        color = (0, 255, 0) if angle == 90 else (0, 0, 255)
+        cv2.line(or_frame, bottom_center, end_point, color, 2)
+        cv2.putText(or_frame, f'{angle} Deg Dist: {distance:.2f}', (10, 30 + 30 * angles.index(angle)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+    return or_frame
+
+
+
+
+def centerSideWalk():
+    pass    
+
+
+
+
 
 while True:
     ret, or_frame = videoFrame.read()
@@ -50,6 +124,8 @@ while True:
     
     # Define a Region of Interest (ROI) for the sidewalk (e.g., bottom half of the image)
     height, width = or_frame.shape[:2]
+    bottom_center = (width // 2, height - 1)
+
     roi_mask = np.zeros((height, width), dtype=np.uint8)
     cv2.rectangle(roi_mask, (0, height//2), (width, height), (255), thickness=cv2.FILLED)
     
@@ -71,9 +147,13 @@ while True:
     filtered_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_area]
     
     
-    
+    # Contour Lines ------------------------------------------------------------------------------------------------------------------------------
+    angles = [45, 90, 135]
+    or_frame = distanceContours(or_frame, edges, bottom_center, angles)
     # Draw contours on the original frame
     cv2.drawContours(or_frame, contours, -1, (0, 255, 0), 3)
+   
+
 
 
 
@@ -84,7 +164,7 @@ while True:
 
 
 
-
+ 
 
     # Exiting the player
     key = cv2.waitKey(25)
